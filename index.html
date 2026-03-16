@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rompecabezas Declinaciones Latinas</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; background-color: #f8fafc; overflow: hidden; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes scale-up { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes unlock-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+        @keyframes subtle-pulse { 0%, 100% { background-color: rgba(255,255,255,0.6); } 50% { background-color: rgba(219,234,254,0.9); border-color: #60a5fa; } }
+        @keyframes shake {
+            0% { transform: translateX(0) rotate(0); }
+            25% { transform: translateX(-8px) rotate(-8deg); }
+            50% { transform: translateX(8px) rotate(8deg); }
+            75% { transform: translateX(-8px) rotate(-8deg); }
+            100% { transform: translateX(0) rotate(0); }
+        }
+        .target-cell { animation: subtle-pulse 2s infinite; cursor: pointer !important; }
+
+        /* ANIMACIÓN DE TRANSICIÓN AL COLISEO */
+        .colosseum-bg {
+            background-color: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(8px);
+        }
+        .colosseum-container {
+            transform-origin: 50% 70%;
+            animation: zoom-into-arena 2.8s cubic-bezier(0.6, 0, 0.2, 1) forwards;
+            will-change: transform, opacity;
+        }
+        .door-left {
+            transform-origin: 320px 450px;
+            animation: open-door-left 1.5s 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            transform-style: preserve-3d;
+        }
+        .door-right {
+            transform-origin: 480px 450px;
+            animation: open-door-right 1.5s 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            transform-style: preserve-3d;
+        }
+        @keyframes open-door-left {
+            0% { transform: perspective(1200px) rotateY(0deg); }
+            100% { transform: perspective(1200px) rotateY(120deg); }
+        }
+        @keyframes open-door-right {
+            0% { transform: perspective(1200px) rotateY(0deg); }
+            100% { transform: perspective(1200px) rotateY(-120deg); }
+        }
+        @keyframes zoom-into-arena {
+            0% { transform: scale(0.6) translateY(50px); opacity: 0; filter: drop-shadow(0 0 0px rgba(251, 191, 36, 0)); }
+            15% { transform: scale(1) translateY(0); opacity: 1; filter: drop-shadow(0 20px 50px rgba(251, 191, 36, 0.3)); }
+            50% { transform: scale(1) translateY(0); opacity: 1; filter: drop-shadow(0 20px 50px rgba(251, 191, 36, 0.3)); }
+            90% { opacity: 1; filter: drop-shadow(0 0 0px rgba(251, 191, 36, 0)); }
+            100% { transform: scale(18) translateY(-3%); opacity: 0; filter: drop-shadow(0 0 0px rgba(251, 191, 36, 0)); }
+        }
+        @keyframes fade-out-text {
+            0%, 50% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(20px); }
+        }
+        .colosseum-text {
+            animation: fade-out-text 2s 0.6s forwards;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        // === DATOS DE LA TABLA ===
+        const DATA = [
+          ["a", "us/er/ir", "um", "(varía)/s", "(varía)", "is/s", "(varía)/e", "us", "u", "es"],
+          ["ae", "i", "i", "IS", "IS", "IS", "IS", "US", "US", "EI"],
+          ["ae", "o", "o", "I", "i", "i", "i", "ui", "ui", "ei"],
+          ["am", "um", "um", "Em", "(varía)", "em", "(varía)/e", "um", "u", "em"],
+          ["a", "us/er/ir/e", "um", "(varía)/s", "(varía)", "is/s", "(varía)/e", "us", "u", "es"],
+          ["a", "o", "o", "E", "e", "e", "i", "u", "u", "e"],
+          ["ae", "i", "a", "es", "a", "es", "ia", "us", "ua", "es"],
+          ["arum", "orum", "orum", "UM", "UM", "IUM", "IUM", "UUM", "UUM", "ERUM"],
+          ["is", "is", "is", "ibus", "ibus", "ibus", "ibus", "ibus", "ibus", "ebus"],
+          ["as", "os", "a", "es", "a", "es", "ia", "us", "ua", "es"],
+          ["ae", "i", "a", "es", "a", "es", "ia", "us", "ua", "es"],
+          ["is", "is", "is", "ibus", "ibus", "ibus", "ibus", "ibus", "ibus", "ebus"]
+        ];
+
+        // === BANCO DE PALABRAS ===
+        const WORD_POOL = [
+          [["rosa", "rosae", "rosae", "rosam", "rosa", "rosa", "rosae", "rosarum", "rosis", "rosas", "rosae", "rosis"]], 
+          [["dominus", "domini", "domino", "dominum", "domine", "domino", "domini", "dominorum", "dominis", "dominos", "domini", "dominis"]], 
+          [["bellum", "belli", "bello", "bellum", "bellum", "bello", "bella", "bellorum", "bellis", "bella", "bella", "bellis"]], 
+          [["consul", "consulis", "consuli", "consulem", "consul", "consule", "consules", "consulum", "consulibus", "consules", "consules", "consulibus"]], 
+          [["flumen", "fluminis", "flumini", "flumen", "flumen", "flumine", "flumina", "fluminum", "fluminibus", "flumina", "flumina", "fluminibus"]], 
+          [["civis", "civis", "civi", "civem", "civis", "cive", "cives", "civium", "civibus", "cives", "cives", "civibus"]], 
+          [["mare", "maris", "mari", "mare", "mare", "mari", "maria", "marium", "maribus", "maria", "maria", "maribus"]], 
+          [["manus", "manus", "manui", "manum", "manus", "manu", "manus", "manuum", "manibus", "manus", "manus", "manibus"]], 
+          [["cornu", "cornus", "cornui", "cornu", "cornu", "cornu", "cornua", "cornuum", "cornibus", "cornua", "cornua", "cornibus"]], 
+          [["dies", "diei", "diei", "diem", "dies", "die", "dies", "dierum", "diebus", "dies", "dies", "diebus"]] 
+        ];
+
+        const ROW_LABELS = [
+          { main: "NOMINATIVO", sub: "NS/PSO/AP" }, { main: "GENITIVO", sub: "MI" }, { main: "DATIVO", sub: "OI" },
+          { main: "ACUSATIVO", sub: "OD" }, { main: "VOCATIVO", sub: "" }, { main: "ABLATIVO", sub: "C. CIRC/C. AG." },
+          { main: "NOMINATIVO", sub: "los amigos" }, { main: "GENITIVO", sub: "de los amigos" }, { main: "DATIVO", sub: "a/para los amigos" },
+          { main: "ACUSATIVO", sub: "(a) los amigos" }, { main: "VOCATIVO", sub: "¡Oh, amigos!" }, { main: "ABLATIVO", sub: "con/por/sin los amigos" }
+        ];
+
+        const COLORS = {
+          col1Base: '#fcabbb', col1Gen: '#c16dd1', col1Head: '#f799ae',
+          col2Base: '#b6cdf1', col2Gen: '#6d95d8', col2Head: '#a8c5f0',
+          col3Base: '#f4e082', col3Gen: '#d6a836', col3Head: '#e6cf5e',
+          col4Base: '#a2d99d', col4Gen: '#6dbf6b', col4Head: '#88c983',
+          col5Base: '#facca6', col5Gen: '#f096b4', col5Head: '#f5b58c',
+          singHead: '#b8b1e4', plurHead: '#f57c7c', separator: '#3d5068',
+          cellBorder: '#000000', emptySlot: 'rgba(255, 255, 255, 0.6)'
+        };
+
+        const getCellColor = (r, c) => {
+          const isGenitive = r === 1 || r === 7;
+          switch (c) {
+            case 0: return isGenitive ? COLORS.col1Gen : COLORS.col1Base;
+            case 1: case 2: return isGenitive ? COLORS.col2Gen : COLORS.col2Base;
+            case 3: case 4: case 5: case 6: return isGenitive ? COLORS.col3Gen : COLORS.col3Base;
+            case 7: case 8: return isGenitive ? COLORS.col4Gen : COLORS.col4Base;
+            case 9: return isGenitive ? COLORS.col5Gen : COLORS.col5Base;
+            default: return '#ffffff';
+          }
+        };
+
+        const ALL_HINTS = [
+          { icon: "📖", title: "Uso del diccionario", text: "Enunciado: es el modo en el que aparecen las palabras en el diccionario. Existen variables e invariables.", style: "bg-blue-50 text-blue-900 border-blue-400" },
+          { icon: "⚠️", title: "Sustantivos", text: "Aparecen bajo su enunciado normal (nominativo, genitivo), aunque algunas raíces de 3ra declinación cambian.", style: "bg-amber-50 text-amber-900 border-amber-400" },
+          { icon: "🧠", title: "Acepciones", text: "Ningún diccionario te dará la traducción exacta. Presta atención a las diferentes acepciones según contexto.", style: "bg-emerald-50 text-emerald-900 border-emerald-400" },
+          { icon: "💡", title: "Regla del Neutro", text: "¡Nominativo, Vocativo y Acusativo son siempre idénticos! En plural, siempre terminan en '-a' (o '-ia' / '-ua').", style: "bg-purple-50 text-purple-900 border-purple-400" },
+          { icon: "📌", title: "El Genitivo es la Brújula", text: "El genitivo singular te indica a qué declinación pertenece la palabra (-ae, -i, -is, -us, -ei).", style: "bg-rose-50 text-rose-900 border-rose-400" }
+        ];
+
+        const single = (decl, caso, num, gen, tema3ra = null) => [{ decl, caso, num, gen, tema3ra }];
+
+        // === RESTAURACIÓN DE LOS 30 EJERCICIOS BÁSICOS ===
+        const EXERCISES_DATA_BASIC = [
+          { w: "rosam", dict: "rosa, rosae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El poeta cortó a la rosa en el jardín.", target: "a la rosa", syntax: "Objeto Directo (OD)" },
+          { w: "puellarum", dict: "puella, puellae", v: single("1ra", "Genitivo", "Plural", "Femenino"), sentence: "Los cantos de las niñas sonaban alegres.", target: "de las niñas", syntax: "Modificador Indirecto (MI)" },
+          { w: "silvis", dict: "silva, silvae", v: single("1ra", "Ablativo", "Plural", "Femenino"), sentence: "Los soldados se escondieron en los bosques.", target: "en los bosques", syntax: "Complemento Circunstancial (CC)" },
+          { w: "aquae", dict: "aqua, aquae", v: single("1ra", "Genitivo", "Singular", "Femenino"), sentence: "El dulce sonido del agua era relajante.", target: "del agua", syntax: "Modificador Indirecto (MI)" },
+          { w: "vita", dict: "vita, vitae", v: single("1ra", "Nominativo", "Singular", "Femenino"), sentence: "La vida es un hermoso misterio.", target: "La vida", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "dominos", dict: "dominus, domini", v: single("2da", "Acusativo", "Plural", "Masculino"), sentence: "Los siervos saludaron a los amos.", target: "a los amos", syntax: "Objeto Directo (OD)" },
+          { w: "amici", dict: "amicus, amici", v: single("2da", "Nominativo", "Plural", "Masculino"), sentence: "Los amigos siempre te apoyan en las dificultades.", target: "Los amigos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "bella", dict: "bellum, belli", v: single("2da", "Acusativo", "Plural", "Neutro"), sentence: "El general romano detesta las guerras inútiles.", target: "las guerras", syntax: "Objeto Directo (OD)" },
+          { w: "oppidum", dict: "oppidum, oppidi", v: single("2da", "Nominativo", "Singular", "Neutro"), sentence: "La ciudad fortificada resistió el asedio enemigo.", target: "La ciudad fortificada", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "puellae", dict: "puella, puellae", v: single("1ra", "Dativo", "Singular", "Femenino"), sentence: "El mensajero entregó una carta a la niña.", target: "a la niña", syntax: "Objeto Indirecto (OI)" },
+          { w: "servum", dict: "servus, servi", v: single("2da", "Acusativo", "Singular", "Masculino"), sentence: "El cruel amo castigó al esclavo.", target: "al esclavo", syntax: "Objeto Directo (OD)" },
+          { w: "agricolae", dict: "agricola, agricolae", v: single("1ra", "Nominativo", "Plural", "Masculino"), sentence: "Los agricultores trabajan la tierra fértil.", target: "Los agricultores", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "templis", dict: "templum, templi", v: single("2da", "Ablativo", "Plural", "Neutro"), sentence: "Los sacerdotes rezaban en los templos de la ciudad.", target: "en los templos", syntax: "Complemento Circunstancial (CC)" },
+          { w: "puerorum", dict: "puer, pueri", v: single("2da", "Genitivo", "Plural", "Masculino"), sentence: "Los alegres gritos de los niños asustaron a los pájaros.", target: "de los niños", syntax: "Modificador Indirecto (MI)" },
+          { w: "deis", dict: "deus, dei", v: single("2da", "Dativo", "Plural", "Masculino"), sentence: "Los ciudadanos construyeron grandes altares para los dioses.", target: "para los dioses", syntax: "Objeto Indirecto (OI)" },
+          { w: "lupam", dict: "lupa, lupae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El audaz cazador vio a la loba en el bosque profundo.", target: "a la loba", syntax: "Objeto Directo (OD)" },
+          { w: "filius", dict: "filius, filii", v: single("2da", "Nominativo", "Singular", "Masculino"), sentence: "El buen hijo obedece siempre a su respetado padre.", target: "El buen hijo", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "verba", dict: "verbum, verbi", v: single("2da", "Acusativo", "Plural", "Neutro"), sentence: "El sabio maestro pronunció bellas palabras en la plaza.", target: "bellas palabras", syntax: "Objeto Directo (OD)" },
+          { w: "nautis", dict: "nauta, nautae", v: single("1ra", "Dativo", "Plural", "Masculino"), sentence: "El clima favorable dio mucha esperanza a los marineros.", target: "a los marineros", syntax: "Objeto Indirecto (OI)" },
+          { w: "pecuniam", dict: "pecunia, pecuniae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El codicioso mercader perdió todo el dinero en el naufragio.", target: "todo el dinero", syntax: "Objeto Directo (OD)" },
+          { w: "viris", dict: "vir, viri", v: single("2da", "Ablativo", "Plural", "Masculino"), sentence: "El líder marchó a la batalla con los hombres de la tribu.", target: "con los hombres", syntax: "Complemento Circunstancial (CC)" },
+          { w: "equi", dict: "equus, equi", v: single("2da", "Nominativo", "Plural", "Masculino"), sentence: "Los veloces caballos corren libres por la extensa llanura.", target: "Los veloces caballos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "dearum", dict: "dea, deae", v: single("1ra", "Genitivo", "Plural", "Femenino"), sentence: "Las hermosas estatuas de las diosas eran de mármol blanco.", target: "de las diosas", syntax: "Modificador Indirecto (MI)" },
+          { w: "gladio", dict: "gladius, gladii", v: single("2da", "Ablativo", "Singular", "Masculino"), sentence: "El fiero centurión se defendió valientemente con la espada.", target: "con la espada", syntax: "Complemento Circunstancial (CC)" },
+          { w: "epistulam", dict: "epistula, epistulae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El emocionado joven leyó la larga carta bajo la luna.", target: "la larga carta", syntax: "Objeto Directo (OD)" },
+          { w: "magister", dict: "magister, magistri", v: single("2da", "Nominativo", "Singular", "Masculino"), sentence: "El estricto maestro enseña retórica en la escuela de Roma.", target: "El estricto maestro", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "pericula", dict: "periculum, periculi", v: single("2da", "Nominativo", "Plural", "Neutro"), sentence: "Los inminentes peligros del largo viaje eran muy conocidos.", target: "Los inminentes peligros", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "viri", dict: "vir, viri", v: single("2da", "Genitivo", "Singular", "Masculino"), sentence: "El enorme valor del hombre fue admirado por todo el senado.", target: "del hombre", syntax: "Modificador Indirecto (MI)" },
+          { w: "donum", dict: "donum, doni", v: single("2da", "Acusativo", "Singular", "Neutro"), sentence: "El rey extranjero recibió un magnífico regalo del cónsul.", target: "un magnífico regalo", syntax: "Objeto Directo (OD)" },
+          { w: "insulis", dict: "insula, insulae", v: single("1ra", "Ablativo", "Plural", "Femenino"), sentence: "Los temibles piratas escondían sus tesoros en las islas.", target: "en las islas", syntax: "Complemento Circunstancial (CC)" },
+          { w: "deam", dict: "dea, deae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El devoto sacerdote invocó a la diosa en el templo.", target: "a la diosa", syntax: "Objeto Directo (OD)" },
+          { w: "equorum", dict: "equus, equi", v: single("2da", "Genitivo", "Plural", "Masculino"), sentence: "El galope de los caballos resonaba en la montaña.", target: "de los caballos", syntax: "Modificador Indirecto (MI)" },
+          { w: "umbras", dict: "umbra, umbrae", v: single("1ra", "Acusativo", "Plural", "Femenino"), sentence: "La densa niebla ocultaba las sombras de la noche.", target: "las sombras", syntax: "Objeto Directo (OD)" },
+          { w: "patriam", dict: "patria, patriae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El valiente soldado defendió su patria con honor.", target: "su patria", syntax: "Objeto Directo (OD)" },
+          { w: "victoriae", dict: "victoria, victoriae", v: single("1ra", "Dativo", "Singular", "Femenino"), sentence: "El general dedicó un gran sacrificio a la victoria.", target: "a la victoria", syntax: "Objeto Indirecto (OI)" },
+          { w: "memoriam", dict: "memoria, memoriae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "El anciano guardaba la memoria de tiempos mejores.", target: "la memoria", syntax: "Objeto Directo (OD)" },
+          { w: "fabulas", dict: "fabula, fabulae", v: single("1ra", "Acusativo", "Plural", "Femenino"), sentence: "La abuela contaba antiguas fábulas a los niños.", target: "antiguas fábulas", syntax: "Objeto Directo (OD)" },
+          { w: "cena", dict: "cena, cenae", v: single("1ra", "Ablativo", "Singular", "Femenino"), sentence: "Los invitados rieron mucho durante la cena.", target: "durante la cena", syntax: "Complemento Circunstancial (CC)" },
+          { w: "lunae", dict: "luna, lunae", v: single("1ra", "Genitivo", "Singular", "Femenino"), sentence: "La pálida luz de la luna iluminaba el camino.", target: "de la luna", syntax: "Modificador Indirecto (MI)" },
+          { w: "stellis", dict: "stella, stellae", v: single("1ra", "Ablativo", "Plural", "Femenino"), sentence: "El cielo nocturno brillaba con las estrellas.", target: "con las estrellas", syntax: "Complemento Circunstancial (CC)" },
+          { w: "turbam", dict: "turba, turbae", v: single("1ra", "Acusativo", "Singular", "Femenino"), sentence: "Los guardias dispersaron a la multitud en el foro.", target: "a la multitud", syntax: "Objeto Directo (OD)" },
+          { w: "ira", dict: "ira, irae", v: single("1ra", "Ablativo", "Singular", "Femenino"), sentence: "El amo golpeó la mesa con gran ira.", target: "con gran ira", syntax: "Complemento Circunstancial (CC)" },
+          { w: "agrum", dict: "ager, agri", v: single("2da", "Acusativo", "Singular", "Masculino"), sentence: "El campesino aró todo el campo por la mañana.", target: "todo el campo", syntax: "Objeto Directo (OD)" },
+          { w: "magistro", dict: "magister, magistri", v: single("2da", "Dativo", "Singular", "Masculino"), sentence: "El alumno entregó su tablilla de cera al maestro.", target: "al maestro", syntax: "Objeto Indirecto (OI)" },
+          { w: "librum", dict: "liber, libri", v: single("2da", "Acusativo", "Singular", "Masculino"), sentence: "El estudioso leyó un libro muy antiguo en la biblioteca.", target: "un libro muy antiguo", syntax: "Objeto Directo (OD)" },
+          { w: "libris", dict: "liber, libri", v: single("2da", "Ablativo", "Plural", "Masculino"), sentence: "El poeta aprendió mucho en los libros de los griegos.", target: "en los libros", syntax: "Complemento Circunstancial (CC)" },
+          { w: "ludum", dict: "ludus, ludi", v: single("2da", "Acusativo", "Singular", "Masculino"), sentence: "Los niños fueron a la escuela temprano hoy.", target: "a la escuela", syntax: "Objeto Directo (OD)" },
+          { w: "ludi", dict: "ludus, ludi", v: single("2da", "Nominativo", "Plural", "Masculino"), sentence: "Los juegos del circo entretienen mucho a la plebe.", target: "Los juegos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "consilia", dict: "consilium, consilii", v: single("2da", "Nominativo", "Plural", "Neutro"), sentence: "Los sabios consejos siempre son de gran ayuda.", target: "Los sabios consejos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "consilio", dict: "consilium, consilii", v: single("2da", "Ablativo", "Singular", "Neutro"), sentence: "El cónsul actuó de acuerdo con el plan del senado.", target: "con el plan", syntax: "Complemento Circunstancial (CC)" }
+        ];
+
+        // === RESTAURACIÓN DE LOS 40 EJERCICIOS AVANZADOS ===
+        const EXERCISES_DATA_ADVANCED = [
+          { w: "regem", dict: "rex, regis", v: single("3ra", "Acusativo", "Singular", "Masculino", "Consonante"), sentence: "Todo el pueblo aclamó al rey tras la victoria.", target: "al rey", syntax: "Objeto Directo (OD)" },
+          { w: "flumina", dict: "flumen, fluminis", v: single("3ra", "Nominativo", "Plural", "Neutro", "Consonante"), sentence: "Los ríos desembocan finalmente en el vasto mar.", target: "Los ríos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "civium", dict: "civis, civis", v: single("3ra", "Genitivo", "Plural", "Masculino", "Vocálico (-i)"), sentence: "Los antiguos derechos de los ciudadanos son sagrados.", target: "de los ciudadanos", syntax: "Modificador Indirecto (MI)" },
+          { w: "mari", dict: "mare, maris", v: single("3ra", "Ablativo", "Singular", "Neutro", "Vocálico (-i)"), sentence: "Los comerciantes navegaron por el mar durante semanas.", target: "por el mar", syntax: "Complemento Circunstancial (CC)" },
+          { w: "manus", dict: "manus, manus", v: single("4ta", "Acusativo", "Plural", "Femenino"), sentence: "El cónsul lavó cuidadosamente sus manos antes del banquete.", target: "sus manos", syntax: "Objeto Directo (OD)" },
+          { w: "cornua", dict: "cornu, cornus", v: single("4ta", "Nominativo", "Plural", "Neutro"), sentence: "Los cuernos del enorme ciervo asustaron al joven cazador.", target: "Los cuernos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "dies", dict: "dies, diei", v: single("5ta", "Nominativo", "Plural", "Masculino"), sentence: "Los días se acortan mucho durante el crudo invierno.", target: "Los días", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "rem", dict: "res, rei", v: single("5ta", "Acusativo", "Singular", "Femenino"), sentence: "El senador explicó el complejo asunto a toda la asamblea.", target: "el complejo asunto", syntax: "Objeto Directo (OD)" },
+          { w: "militibus", dict: "miles, militis", v: single("3ra", "Dativo", "Plural", "Masculino", "Consonante"), sentence: "El general victorioso repartió tierras a los soldados.", target: "a los soldados", syntax: "Objeto Indirecto (OI)" },
+          { w: "ducem", dict: "dux, ducis", v: single("3ra", "Acusativo", "Singular", "Masculino", "Consonante"), sentence: "Todo el ejército siguió lealmente al líder hasta la muerte.", target: "al líder", syntax: "Objeto Directo (OD)" },
+          { w: "corpora", dict: "corpus, corporis", v: single("3ra", "Acusativo", "Plural", "Neutro", "Consonante"), sentence: "Los afligidos griegos quemaban los cuerpos de los caídos.", target: "los cuerpos", syntax: "Objeto Directo (OD)" },
+          { w: "patris", dict: "pater, patris", v: single("3ra", "Genitivo", "Singular", "Masculino", "Consonante"), sentence: "Las sabias palabras del padre fueron escuchadas con atención.", target: "del padre", syntax: "Modificador Indirecto (MI)" },
+          { w: "matres", dict: "mater, matris", v: single("3ra", "Nominativo", "Plural", "Femenino", "Consonante"), sentence: "Las tristes madres lloraban la temprana partida de los jóvenes.", target: "Las tristes madres", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "urbi", dict: "urbs, urbis", v: single("3ra", "Dativo", "Singular", "Femenino", "Vocálico (-i)"), sentence: "El sabio magistrado dio una nueva ley de impuestos a la ciudad.", target: "a la ciudad", syntax: "Objeto Indirecto (OI)" },
+          { w: "nocte", dict: "nox, noctis", v: single("3ra", "Ablativo", "Singular", "Femenino", "Vocálico (-i)"), sentence: "El escurridizo ladrón escapó rápidamente durante la noche.", target: "durante la noche", syntax: "Complemento Circunstancial (CC)" },
+          { w: "legiones", dict: "legio, legionis", v: single("3ra", "Nominativo", "Plural", "Femenino", "Consonante"), sentence: "Las fuertes legiones marcharon ordenadamente hacia la Galia.", target: "Las fuertes legiones", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "nominum", dict: "nomen, nominis", v: single("3ra", "Genitivo", "Plural", "Neutro", "Consonante"), sentence: "La larga lista de los nombres fue publicada en el foro.", target: "de los nombres", syntax: "Modificador Indirecto (MI)" },
+          { w: "virtute", dict: "virtus, virtutis", v: single("3ra", "Ablativo", "Singular", "Femenino", "Consonante"), sentence: "Los espartanos vencieron a sus enemigos por su gran virtud.", target: "por su gran virtud", syntax: "Complemento Circunstancial (CC)" },
+          { w: "vocem", dict: "vox, vocis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Consonante"), sentence: "Todo el silencioso pueblo escuchó atentamente la voz del orador.", target: "la voz", syntax: "Objeto Directo (OD)" },
+          { w: "tempus", dict: "tempus, temporis", v: single("3ra", "Nominativo", "Singular", "Neutro", "Consonante"), sentence: "El cruel tiempo vuela deprisa y no perdona a nadie.", target: "El cruel tiempo", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "fratrum", dict: "frater, fratris", v: single("3ra", "Genitivo", "Plural", "Masculino", "Consonante"), sentence: "La constante discordia de los hermanos arruinó la familia.", target: "de los hermanos", syntax: "Modificador Indirecto (MI)" },
+          { w: "homines", dict: "homo, hominis", v: single("3ra", "Acusativo", "Plural", "Masculino", "Consonante"), sentence: "Los inmortales dioses observan a los hombres desde el alto Olimpo.", target: "a los hombres", syntax: "Objeto Directo (OD)" },
+          { w: "lucem", dict: "lux, lucis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Consonante"), sentence: "La brillante antorcha trajo la luz al oscuro túnel.", target: "la luz", syntax: "Objeto Directo (OD)" },
+          { w: "caput", dict: "caput, capitis", v: single("3ra", "Nominativo", "Singular", "Neutro", "Consonante"), sentence: "La enorme cabeza del fiero jabalí fue servida en la cena.", target: "La enorme cabeza", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "regibus", dict: "rex, regis", v: single("3ra", "Ablativo", "Plural", "Masculino", "Consonante"), sentence: "El diplomático firmó un tratado de paz con los reyes.", target: "con los reyes", syntax: "Complemento Circunstancial (CC)" },
+          { w: "animalia", dict: "animal, animalis", v: single("3ra", "Nominativo", "Plural", "Neutro", "Vocálico (-i)"), sentence: "Los veloces animales huyeron aterrorizados del bosque incendiado.", target: "Los veloces animales", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "hostis", dict: "hostis, hostis", v: single("3ra", "Genitivo", "Singular", "Masculino", "Vocálico (-i)"), sentence: "El gran campamento del enemigo fue destruido en la batalla.", target: "del enemigo", syntax: "Modificador Indirecto (MI)" },
+          { w: "pace", dict: "pax, pacis", v: single("3ra", "Ablativo", "Singular", "Femenino", "Consonante"), sentence: "Los ciudadanos vivieron en paz durante su largo reinado.", target: "en paz", syntax: "Complemento Circunstancial (CC)" },
+          { w: "vulnus", dict: "vulnus, vulneris", v: single("3ra", "Acusativo", "Singular", "Neutro", "Consonante"), sentence: "El hábil médico curó la profunda herida del valiente gladiador.", target: "la profunda herida", syntax: "Objeto Directo (OD)" },
+          { w: "navium", dict: "navis, navis", v: single("3ra", "Genitivo", "Plural", "Femenino", "Vocálico (-i)"), sentence: "El gigantesco tamaño de las naves impresionó a los bárbaros.", target: "de las naves", syntax: "Modificador Indirecto (MI)" },
+          { w: "exercitus", dict: "exercitus, exercitus", v: single("4ta", "Nominativo", "Singular", "Masculino"), sentence: "El temible ejército cruzó el caudaloso río rápidamente.", target: "El temible ejército", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "senatui", dict: "senatus, senatus", v: single("4ta", "Dativo", "Singular", "Masculino"), sentence: "El enviado extranjero habló respetuosamente al senado romano.", target: "al senado", syntax: "Objeto Indirecto (OI)" },
+          { w: "impetum", dict: "impetus, impetus", v: single("4ta", "Acusativo", "Singular", "Masculino"), sentence: "La sólida muralla resistió el brutal ataque de las tropas.", target: "el brutal ataque", syntax: "Objeto Directo (OD)" },
+          { w: "portubus", dict: "portus, portus", v: single("4ta", "Ablativo", "Plural", "Masculino"), sentence: "Las flotas mercantes descansaban muy tranquilas en los puertos.", target: "en los puertos", syntax: "Complemento Circunstancial (CC)" },
+          { w: "magistratuum", dict: "magistratus, magistratus", v: single("4ta", "Genitivo", "Plural", "Masculino"), sentence: "La firme decisión de los magistrados fue final y absoluta.", target: "de los magistrados", syntax: "Modificador Indirecto (MI)" },
+          { w: "vultus", dict: "vultus, vultus", v: single("4ta", "Acusativo", "Plural", "Masculino"), sentence: "El comandante observó los pálidos rostros de sus tropas.", target: "los pálidos rostros", syntax: "Objeto Directo (OD)" },
+          { w: "fidem", dict: "fides, fidei", v: single("5ta", "Acusativo", "Singular", "Femenino"), sentence: "El valiente soldado prometió mantener su inquebrantable lealtad.", target: "su inquebrantable lealtad", syntax: "Objeto Directo (OD)" },
+          { w: "spem", dict: "spes, spei", v: single("5ta", "Acusativo", "Singular", "Femenino"), sentence: "Los asediados ciudadanos perdieron toda la esperanza ayer.", target: "toda la esperanza", syntax: "Objeto Directo (OD)" },
+          { w: "rebus", dict: "res, rei", v: single("5ta", "Ablativo", "Plural", "Femenino"), sentence: "El gran filósofo escribió un tratado sobre las cosas naturales.", target: "sobre las cosas", syntax: "Complemento Circunstancial (CC)" },
+          { w: "fidei", dict: "fides, fidei", v: single("5ta", "Genitivo", "Singular", "Femenino"), sentence: "El gran valor de la lealtad es incalculable en la guerra.", target: "de la lealtad", syntax: "Modificador Indirecto (MI)" },
+          { w: "legem", dict: "lex, legis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Consonante"), sentence: "El magistrado dictó una nueva ley para todos.", target: "una nueva ley", syntax: "Objeto Directo (OD)" },
+          { w: "leges", dict: "lex, legis", v: single("3ra", "Nominativo", "Plural", "Femenino", "Consonante"), sentence: "Las leyes de las doce tablas son muy estrictas.", target: "Las leyes", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "lucis", dict: "lux, lucis", v: single("3ra", "Genitivo", "Singular", "Femenino", "Consonante"), sentence: "La velocidad de la luz asombra a los filósofos.", target: "de la luz", syntax: "Modificador Indirecto (MI)" },
+          { w: "pacem", dict: "pax, pacis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Consonante"), sentence: "El pueblo deseaba la paz tras tantos años de guerra.", target: "la paz", syntax: "Objeto Directo (OD)" },
+          { w: "noctium", dict: "nox, noctis", v: single("3ra", "Genitivo", "Plural", "Femenino", "Vocálico (-i)"), sentence: "El frío de las noches de invierno era insoportable.", target: "de las noches", syntax: "Modificador Indirecto (MI)" },
+          { w: "urbes", dict: "urbs, urbis", v: single("3ra", "Acusativo", "Plural", "Femenino", "Vocálico (-i)"), sentence: "El general romano conquistó varias ciudades en Galia.", target: "varias ciudades", syntax: "Objeto Directo (OD)" },
+          { w: "partem", dict: "pars, partis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Vocálico (-i)"), sentence: "El esclavo comió solo una parte del pan duro.", target: "una parte", syntax: "Objeto Directo (OD)" },
+          { w: "hostium", dict: "hostis, hostis", v: single("3ra", "Genitivo", "Plural", "Masculino", "Vocálico (-i)"), sentence: "El número de los enemigos era aterrador en la colina.", target: "de los enemigos", syntax: "Modificador Indirecto (MI)" },
+          { w: "naves", dict: "navis, navis", v: single("3ra", "Acusativo", "Plural", "Femenino", "Vocálico (-i)"), sentence: "La tormenta destruyó rápidamente las naves del puerto.", target: "las naves", syntax: "Objeto Directo (OD)" },
+          { w: "maria", dict: "mare, maris", v: single("3ra", "Nominativo", "Plural", "Neutro", "Vocálico (-i)"), sentence: "Los profundos mares esconden misterios insondables.", target: "Los profundos mares", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "animalium", dict: "animal, animalis", v: single("3ra", "Genitivo", "Plural", "Neutro", "Vocálico (-i)"), sentence: "Los aullidos de los animales se escucharon toda la noche.", target: "de los animales", syntax: "Modificador Indirecto (MI)" },
+          { w: "flumini", dict: "flumen, fluminis", v: single("3ra", "Dativo", "Singular", "Neutro", "Consonante"), sentence: "Los habitantes ofrecieron flores al río sagrado.", target: "al río", syntax: "Objeto Indirecto (OI)" },
+          { w: "nomine", dict: "nomen, nominis", v: single("3ra", "Ablativo", "Singular", "Neutro", "Consonante"), sentence: "El gladiador era conocido por un nombre falso.", target: "por un nombre falso", syntax: "Complemento Circunstancial (CC)" },
+          { w: "tempora", dict: "tempus, temporis", v: single("3ra", "Acusativo", "Plural", "Neutro", "Consonante"), sentence: "Los ancianos recordaban siempre los tiempos pasados.", target: "los tiempos pasados", syntax: "Objeto Directo (OD)" },
+          { w: "vulneribus", dict: "vulnus, vulneris", v: single("3ra", "Ablativo", "Plural", "Neutro", "Consonante"), sentence: "El soldado murió a causa de las heridas recibidas.", target: "de las heridas", syntax: "Complemento Circunstancial (CC)" },
+          { w: "itinera", dict: "iter, itineris", v: single("3ra", "Nominativo", "Plural", "Neutro", "Consonante"), sentence: "Los largos viajes por las montañas son agotadores.", target: "Los largos viajes", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "capitis", dict: "caput, capitis", v: single("3ra", "Genitivo", "Singular", "Neutro", "Consonante"), sentence: "La herida de la cabeza sangraba copiosamente.", target: "de la cabeza", syntax: "Modificador Indirecto (MI)" },
+          { w: "fratri", dict: "frater, fratris", v: single("3ra", "Dativo", "Singular", "Masculino", "Consonante"), sentence: "El comerciante envió una larga misiva al hermano.", target: "al hermano", syntax: "Objeto Indirecto (OI)" },
+          { w: "matrum", dict: "mater, matris", v: single("3ra", "Genitivo", "Plural", "Femenino", "Consonante"), sentence: "El llanto de las madres conmovió al propio general.", target: "de las madres", syntax: "Modificador Indirecto (MI)" },
+          { w: "sorores", dict: "soror, sororis", v: single("3ra", "Nominativo", "Plural", "Femenino", "Consonante"), sentence: "Las tres hermanas tejen juntas el destino de los hombres.", target: "Las tres hermanas", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "homini", dict: "homo, hominis", v: single("3ra", "Dativo", "Singular", "Masculino", "Consonante"), sentence: "Los dioses no le concedieron la inmortalidad al hombre.", target: "al hombre", syntax: "Objeto Indirecto (OI)" },
+          { w: "virginem", dict: "virgo, virginis", v: single("3ra", "Acusativo", "Singular", "Femenino", "Consonante"), sentence: "El dragón exigía devorar a la doncella en la cueva.", target: "a la doncella", syntax: "Objeto Directo (OD)" },
+          { w: "militum", dict: "miles, militis", v: single("3ra", "Genitivo", "Plural", "Masculino", "Consonante"), sentence: "El gran coraje de los soldados salvó toda la línea defensiva.", target: "de los soldados", syntax: "Modificador Indirecto (MI)" },
+          { w: "equites", dict: "eques, equitis", v: single("3ra", "Acusativo", "Plural", "Masculino", "Consonante"), sentence: "El general romano envió a los jinetes por el flanco izquierdo.", target: "a los jinetes", syntax: "Objeto Directo (OD)" },
+          { w: "mente", dict: "mens, mentis", v: single("3ra", "Ablativo", "Singular", "Femenino", "Vocálico (-i)"), sentence: "El filósofo lo comprendió todo con su brillante mente.", target: "con su brillante mente", syntax: "Complemento Circunstancial (CC)" },
+          { w: "gentium", dict: "gens, gentis", v: single("3ra", "Genitivo", "Plural", "Femenino", "Vocálico (-i)"), sentence: "Las ricas costumbres de las naciones asombran a los viajeros.", target: "de las naciones", syntax: "Modificador Indirecto (MI)" },
+          { w: "ignem", dict: "ignis, ignis", v: single("3ra", "Acusativo", "Singular", "Masculino", "Vocálico (-i)"), sentence: "Prometeo robó secretamente el fuego a los altos dioses.", target: "el fuego", syntax: "Objeto Directo (OD)" },
+          { w: "fines", dict: "finis, finis", v: single("3ra", "Acusativo", "Plural", "Masculino", "Vocálico (-i)"), sentence: "El imperio extendió finalmente sus fronteras hasta el océano.", target: "sus fronteras", syntax: "Objeto Directo (OD)" },
+          { w: "virtutis", dict: "virtus, virtutis", v: single("3ra", "Genitivo", "Singular", "Femenino", "Consonante"), sentence: "El premio de la virtud es la paz duradera del alma.", target: "de la virtud", syntax: "Modificador Indirecto (MI)" },
+          { w: "pedem", dict: "pes, pedis", v: single("3ra", "Acusativo", "Singular", "Masculino", "Consonante"), sentence: "El viajero lastimó gravemente su pie en el rocoso camino.", target: "su pie", syntax: "Objeto Directo (OD)" },
+          { w: "manibus", dict: "manus, manus", v: single("4ta", "Ablativo", "Plural", "Femenino"), sentence: "El artesano trabajó el duro hierro con sus propias manos.", target: "con sus propias manos", syntax: "Complemento Circunstancial (CC)" },
+          { w: "cornuum", dict: "cornu, cornus", v: single("4ta", "Genitivo", "Plural", "Neutro"), sentence: "El sonido de los cuernos anunció el inicio de la batalla.", target: "de los cuernos", syntax: "Modificador Indirecto (MI)" },
+          { w: "genua", dict: "genu, genus", v: single("4ta", "Acusativo", "Plural", "Neutro"), sentence: "El suplicante abrazó fuertemente las rodillas del rey.", target: "las rodillas", syntax: "Objeto Directo (OD)" },
+          { w: "senatum", dict: "senatus, senatus", v: single("4ta", "Acusativo", "Singular", "Masculino"), sentence: "El dictador convocó velozmente al senado en el templo.", target: "al senado", syntax: "Objeto Directo (OD)" },
+          { w: "passuum", dict: "passus, passus", v: single("4ta", "Genitivo", "Plural", "Masculino"), sentence: "La medida exacta de los pasos determinaba las distancias.", target: "de los pasos", syntax: "Modificador Indirecto (MI)" },
+          { w: "cursus", dict: "cursus, cursus", v: single("4ta", "Nominativo", "Plural", "Masculino"), sentence: "Los veloces cursos de los astros fascinan a los sabios.", target: "Los veloces cursos", syntax: "Núcleo del Sujeto (NS)" },
+          { w: "diebus", dict: "dies, diei", v: single("5ta", "Ablativo", "Plural", "Masculino"), sentence: "El festival sagrado continuaba en aquellos felices días.", target: "en aquellos felices días", syntax: "Complemento Circunstancial (CC)" },
+          { w: "rebus", dict: "res, rei", v: single("5ta", "Dativo", "Plural", "Femenino"), sentence: "El líder siempre prestaba atención a las cosas públicas.", target: "a las cosas", syntax: "Objeto Indirecto (OI)" },
+          { w: "fide", dict: "fides, fidei", v: single("5ta", "Ablativo", "Singular", "Femenino"), sentence: "El trato fue sellado solemnemente con buena fe.", target: "con buena fe", syntax: "Complemento Circunstancial (CC)" },
+          { w: "spei", dict: "spes, spei", v: single("5ta", "Dativo", "Singular", "Femenino"), sentence: "No hay que cederle todo el espacio a la vana esperanza.", target: "a la vana esperanza", syntax: "Objeto Indirecto (OI)" }
+        ];
+
+        const OPTIONS = {
+          decl: ["1ra", "2da", "3ra", "4ta", "5ta"],
+          caso: ["Nominativo", "Genitivo", "Dativo", "Acusativo", "Vocativo", "Ablativo"],
+          num: ["Singular", "Plural"],
+          gen: ["Masculino", "Femenino", "Neutro"]
+        };
+
+        const formatTime = (seconds) => {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        };
+
+        function App() {
+          const [view, setView] = useState('welcome');
+          const [nombre, setNombre] = useState('');
+          
+          // ================= ESTADOS GLOBALES DE ANIMACIÓN =================
+          const [isEnteringColosseum, setIsEnteringColosseum] = useState(false); 
+          const [transitionText, setTransitionText] = useState("¡Ad Arena!");
+
+          // ================= ESTADO DEL PUZZLE Y PUNTOS =================
+          const [isPlacedGrid, setIsPlacedGrid] = useState(Array(12).fill(null).map(() => Array(10).fill(false)));
+          const [isAdvancedUnlocked, setIsAdvancedUnlocked] = useState(false);
+          const [unlockStage, setUnlockStage] = useState(0); 
+          const [currentExamples, setCurrentExamples] = useState(() => WORD_POOL.map(pool => pool[Math.floor(Math.random() * pool.length)]));
+          const [selectedPiece, setSelectedPiece] = useState(null);
+          const [intentos, setIntentos] = useState(0);
+          const [flashCell, setFlashCell] = useState(null);
+          const [popCell, setPopCell] = useState(null);
+          const [gameComplete, setGameComplete] = useState(false);
+          const [showCompleteModal, setShowCompleteModal] = useState(false);
+          const [activeHintIndex, setActiveHintIndex] = useState(() => Math.floor(Math.random() * ALL_HINTS.length));
+
+          // ================= ESTADO DEL TIEMPO Y PUNTAJE =================
+          const [timer, setTimer] = useState(0);
+          const [isTimerActive, setIsTimerActive] = useState(false);
+          const [scoreTotal, setScoreTotal] = useState(0);
+          const [mistakesCurrentPhase, setMistakesCurrentPhase] = useState(0);
+          const [stats, setStats] = useState({ basic: null, advanced: null });
+
+          // ================= ESTADO DE EJERCICIOS =================
+          const [exPool, setExPool] = useState([]);
+          const [exIndex, setExIndex] = useState(0);
+          const [exAns, setExAns] = useState({ decl: '', caso: '', num: '', gen: '', dict: '', tema3ra: '' });
+          const [exFeedback, setExFeedback] = useState(null);
+          const [exHints, setExHints] = useState([]);
+          const [score, setScore] = useState({ correct: 0, mistakes: 0 });
+          const [exMistakesCurrentWord, setExMistakesCurrentWord] = useState(0); // Para el bonus de +10
+          const [exCurrentWordScore, setExCurrentWordScore] = useState(0); // Para calcular la diferencia de puntos por intento
+
+          const COL1_WIDTH = 34; 
+          const COL2_WIDTH = 110; 
+
+          const remainingPieces = useMemo(() => {
+            const counts = {};
+            DATA.forEach((row, r) => {
+              row.forEach((val, c) => {
+                if (c >= 3 && !isAdvancedUnlocked) return;
+                if (!isPlacedGrid[r][c]) counts[val] = (counts[val] || 0) + 1;
+              });
+            });
+            return counts;
+          }, [isPlacedGrid, isAdvancedUnlocked]);
+
+          const uniquePieces = Object.keys(remainingPieces).sort();
+          const faltantes = Object.values(remainingPieces).reduce((acc, val) => acc + val, 0);
+
+          // EFECTO DEL TEMPORIZADOR
+          useEffect(() => {
+              let interval = null;
+              if (view === 'puzzle' && isTimerActive) {
+                  interval = setInterval(() => {
+                      setTimer(prev => prev + 1);
+                  }, 1000);
+              } else {
+                  clearInterval(interval);
+              }
+              return () => clearInterval(interval);
+          }, [view, isTimerActive]);
+
+          // EFECTO DE COMPLETAR TABLA
+          useEffect(() => {
+            if (faltantes === 0 && intentos > 0 && view === 'puzzle' && unlockStage === 0 && !gameComplete) {
+              setIsTimerActive(false);
+              setGameComplete(true);
+              
+              setScoreTotal(prevScore => {
+                  let bonus = 0;
+                  if (!isAdvancedUnlocked) {
+                      if (mistakesCurrentPhase === 0) bonus = 50;
+                  } else {
+                      if (mistakesCurrentPhase === 0) bonus = 100;
+                      else if (mistakesCurrentPhase === 1) bonus = 70;
+                      else if (mistakesCurrentPhase === 2) bonus = 50;
+                      else if (mistakesCurrentPhase === 3) bonus = 30;
+                  }
+                  const finalScore = prevScore + bonus;
+                  
+                  setStats(prevStats => ({
+                      ...prevStats,
+                      [isAdvancedUnlocked ? 'advanced' : 'basic']: { time: timer, score: finalScore, bonus: bonus }
+                  }));
+                  
+                  return finalScore;
+              });
+
+              setTimeout(() => setShowCompleteModal(true), 500); 
+            }
+          }, [faltantes, intentos, view, gameComplete, unlockStage, isAdvancedUnlocked, mistakesCurrentPhase, timer]);
+
+          useEffect(() => {
+            if (selectedPiece && !remainingPieces[selectedPiece]) setSelectedPiece(null);
+          }, [remainingPieces, selectedPiece]);
+
+          const autoCompletePuzzle = () => {
+            setIsPlacedGrid(Array(12).fill(null).map((_, r) => Array(10).fill(null).map((_, c) => c >= 3 && !isAdvancedUnlocked ? false : true)));
+            setIntentos(prev => prev === 0 ? 1 : prev);
+            setMistakesCurrentPhase(999); // Evita dar bono perfecto
+          };
+
+          const attemptPlacement = (val, r, c) => {
+            if (isPlacedGrid[r][c] || gameComplete) return;
+            if (c >= 3 && !isAdvancedUnlocked) return; 
+            
+            setIntentos(prev => prev + 1);
+            
+            if (DATA[r][c] === val) {
+              const newGrid = isPlacedGrid.map(row => [...row]);
+              newGrid[r][c] = true;
+              setIsPlacedGrid(newGrid);
+              setPopCell({ r, c });
+              setScoreTotal(prev => prev + 10);
+              setTimeout(() => setPopCell(null), 300);
+            } else {
+              setFlashCell({ r, c });
+              setMistakesCurrentPhase(prev => prev + 1);
+              setScoreTotal(prev => prev - 5);
+              setTimeout(() => setFlashCell(null), 500);
+            }
+          };
+
+          const handleDragStart = (e, val) => { e.dataTransfer.setData('text/plain', val); setSelectedPiece(val); };
+          const handleDrop = (e, r, c) => { e.preventDefault(); const val = e.dataTransfer.getData('text/plain'); if (val) attemptPlacement(val, r, c); };
+          const handleCellClick = (r, c) => { if (selectedPiece) attemptPlacement(selectedPiece, r, c); };
+
+          const resetGame = () => {
+            setIsPlacedGrid(Array(12).fill(null).map(() => Array(10).fill(false)));
+            setIntentos(0); setGameComplete(false); setShowCompleteModal(false); setSelectedPiece(null);
+            setCurrentExamples(WORD_POOL.map(pool => pool[Math.floor(Math.random() * pool.length)]));
+            setTimer(0);
+            setIsTimerActive(true);
+            setScoreTotal(0);
+            setMistakesCurrentPhase(0);
+            setStats({ basic: null, advanced: null });
+            setIsAdvancedUnlocked(false);
+          };
+
+          const handleUnlock = () => {
+            setShowCompleteModal(false);
+            setGameComplete(false);
+            setUnlockStage(1);
+            
+            // Reiniciar timer y errores para la fase avanzada
+            setTimer(0);
+            setMistakesCurrentPhase(0);
+
+            setTimeout(() => setUnlockStage(2), 1200); 
+            setTimeout(() => setUnlockStage(3), 1400); 
+            setTimeout(() => {
+                setUnlockStage(0);
+                setIsAdvancedUnlocked(true);
+                setIsTimerActive(true); // Reiniciamos el reloj para las avanzadas
+            }, 4500); 
+          };
+
+          const handleTransitionTo = (targetView, textMessage = "¡Ad Arena!") => {
+              setTransitionText(textMessage);
+              setIsEnteringColosseum(true);
+              setTimeout(() => { 
+                setView(targetView); 
+                if (targetView === 'puzzle') {
+                    setIsTimerActive(true);
+                } else {
+                    setIsTimerActive(false);
+                }
+              }, 2200); 
+              setTimeout(() => { setIsEnteringColosseum(false); }, 2800);
+          };
+
+          const startExercises = (modeType) => {
+            const dataToUse = modeType === 'advanced' ? EXERCISES_DATA_ADVANCED : EXERCISES_DATA_BASIC;
+            setExPool([...dataToUse].sort(() => 0.5 - Math.random()).slice(0, 10)); // Limita a 10 ejercicios por partida
+            setExIndex(0);
+            setScore({ correct: 0, mistakes: 0 }); 
+            setExAns({ decl: '', caso: '', num: '', gen: '', dict: '', tema3ra: '' });
+            setExFeedback(null); 
+            setExHints([]); 
+            setExMistakesCurrentWord(0);
+            setExCurrentWordScore(0);
+            
+            setShowCompleteModal(false);
+            
+            setIsTimerActive(false); // Nos aseguramos de frenar el tiempo
+            
+            handleTransitionTo('exercises', '¡Ad Pugnam!');
+          };
+
+          const toggleAns = (category, value) => { if (exFeedback !== 'correct') { setExAns(prev => ({ ...prev, [category]: value })); setExFeedback(null); }};
+          const nextExercise = () => { 
+            if (exIndex + 1 < exPool.length) { 
+                setExIndex(exIndex + 1); 
+                setExAns({ decl: '', caso: '', num: '', gen: '', dict: '', tema3ra: '' }); 
+                setExFeedback(null); 
+                setExHints([]); 
+                setExMistakesCurrentWord(0);
+                setExCurrentWordScore(0);
+            } else { 
+                setExFeedback('finished'); 
+            } 
+          };
+          const autoCompleteExercise = () => { 
+            const cw = exPool[exIndex]; 
+            setExAns({ decl: cw.v[0].decl, caso: cw.v[0].caso, num: cw.v[0].num, gen: cw.v[0].gen, dict: cw.dict, tema3ra: cw.v[0].tema3ra || '' }); 
+            setExFeedback(null);
+            setExMistakesCurrentWord(prev => prev + 1); // Deshabilita el bonus perfecto
+          };
+
+          const checkExercise = () => {
+            if (!exAns.decl || !exAns.caso || !exAns.num || !exAns.gen || !exAns.dict || (exAns.decl === '3ra' && !exAns.tema3ra)) { setExFeedback('missing'); return; }
+            const cw = exPool[exIndex];
+            
+            const isDeclCorrect = cw.v.some(v => v.decl === exAns.decl);
+            const isCasoCorrect = cw.v.some(v => v.caso === exAns.caso);
+            const isNumCorrect = cw.v.some(v => v.num === exAns.num);
+            const isGenCorrect = cw.v.some(v => v.gen === exAns.gen);
+            const isCorrectDict = (exAns.dict || "").toLowerCase().replace(/\s+/g, '') === (cw.dict || "").toLowerCase().replace(/\s+/g, '');
+
+            let correctCount = 0;
+            let incorrectCount = 0;
+            
+            if (isDeclCorrect) correctCount++; else incorrectCount++;
+            if (isCasoCorrect) correctCount++; else incorrectCount++;
+            if (isNumCorrect) correctCount++; else incorrectCount++;
+            if (isGenCorrect) correctCount++; else incorrectCount++;
+            if (isCorrectDict) correctCount++; else incorrectCount++;
+
+            let expectedTotal = 5;
+            let isTema3raCorrect = true;
+
+            if (cw.v[0].decl === '3ra') {
+                expectedTotal = 6;
+                if (exAns.decl === '3ra') {
+                    isTema3raCorrect = cw.v.some(v => v.tema3ra === exAns.tema3ra);
+                    if (isTema3raCorrect) correctCount++; else incorrectCount++;
+                } else {
+                    incorrectCount++;
+                    isTema3raCorrect = false;
+                }
+            }
+
+            let attemptScore = (correctCount * 10) - (incorrectCount * 5);
+            const isFirstAttempt = (exMistakesCurrentWord === 0 && exFeedback === null);
+
+            if (correctCount === expectedTotal) { 
+                setExFeedback('correct'); 
+                setScore(s => ({ ...s, correct: s.correct + 1 })); 
+                setExHints([]); 
+                
+                if (isFirstAttempt) {
+                    attemptScore += 10; // Bonus perfecto
+                }
+                
+                const diff = attemptScore - exCurrentWordScore;
+                setScoreTotal(prev => prev + diff);
+                setExCurrentWordScore(attemptScore);
+            } else {
+                setExFeedback('incorrect'); 
+                setScore(s => ({ ...s, mistakes: s.mistakes + 1 }));
+                if (isFirstAttempt) setExMistakesCurrentWord(1); // Marca que ya no es el primer intento
+                
+                const diff = attemptScore - exCurrentWordScore;
+                setScoreTotal(prev => prev + diff);
+                setExCurrentWordScore(attemptScore);
+
+                const hints = [];
+                if (!isDeclCorrect) hints.push("Declinación");
+                if (!isCasoCorrect) hints.push("Caso");
+                if (!isNumCorrect) hints.push("Número");
+                if (!isGenCorrect) hints.push("Género");
+                if (!isCorrectDict) hints.push("Enunciado");
+                if (cw.v[0].decl === '3ra' && exAns.decl === '3ra' && !isTema3raCorrect) hints.push("Tema de 3ra Decl.");
+                setExHints(hints);
+            }
+          };
+
+          // ================= CONTENIDO DE LAS VISTAS =================
+          let content = null;
+
+          if (view === 'welcome') {
+            content = (
+              <div className="h-[100dvh] bg-slate-100 flex flex-col items-center justify-center font-sans p-4 relative overflow-hidden w-full">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400"></div>
+                <div className="absolute bottom-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400"></div>
+                
+                <div className="bg-white p-6 sm:p-10 rounded-2xl shadow-2xl text-center max-w-lg w-full border border-slate-200 z-10" style={{ animation: 'scale-up 0.5s ease-out' }}>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">
+                    Facultad de Humanidades y Ciencias Sociales - UNJu
+                  </p>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-800 mb-6 uppercase tracking-wider leading-snug">
+                    Bienvenidos a la Cátedra de <span className="text-yellow-600 block text-4xl sm:text-5xl mt-2">Latín I</span> <span className="text-slate-500 text-xl block mt-1">- 2026 -</span>
+                  </h1>
+                  
+                  <div className="relative mb-6 rounded-xl overflow-hidden shadow-md border-2 border-slate-100">
+                    <img src="https://images.unsplash.com/photo-1552832230-c0197dd311b5?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" alt="Roma" className="w-full h-40 sm:h-56 object-cover transition-transform duration-700 hover:scale-105" />
+                  </div>
+
+                  <div className="flex flex-col gap-3 mb-6">
+                    <input type="text" placeholder="Ingresa tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-yellow-500 focus:ring-0 outline-none transition-colors font-bold text-slate-700 text-center text-lg" />
+                  </div>
+                  
+                  <button onClick={() => { if(nombre.trim()) handleTransitionTo('menu', '¡Salve!'); }} disabled={!nombre.trim()}
+                    className={`w-full font-black py-4 px-8 rounded-xl text-lg sm:text-xl shadow-lg transition-all flex items-center justify-center gap-2 mb-6
+                      ${nombre.trim() ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 active:scale-95' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                    Continuar ➔
+                  </button>
+
+                  <div className="pt-4 border-t border-slate-100 mt-2">
+                    <p className="text-sm font-medium text-slate-400">
+                      Creado por <span className="text-slate-600 font-bold">PFL</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          else if (view === 'menu') {
+            content = (
+              <div className="h-[100dvh] bg-slate-100 flex flex-col items-center justify-center font-sans p-4 relative overflow-hidden w-full">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400"></div>
+                <div className="absolute bottom-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400"></div>
+                
+                <div className="bg-white p-6 sm:p-10 rounded-2xl shadow-2xl text-center max-w-lg w-full border border-slate-200 z-10" style={{ animation: 'scale-up 0.3s ease-out' }}>
+                  <h2 className="text-3xl sm:text-4xl font-black text-slate-800 mb-2">¡Salve, {nombre}! 🏛️</h2>
+                  <p className="text-slate-600 mb-8 text-lg font-medium">¿Qué deseas hacer antes de empezar?</p>
+                  
+                  <div className="flex flex-col gap-4">
+                    <button onClick={() => { resetGame(); handleTransitionTo('puzzle', '¡Ad Ludum!'); }} className="bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-xl w-full text-lg sm:text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
+                      🎮 Iniciar el juego
+                    </button>
+                    <button onClick={() => handleTransitionTo('phonetics', '¡Ad Vocem!')} className="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 px-6 rounded-xl w-full text-lg sm:text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
+                      🗣️ Fonética Latina
+                    </button>
+                    <button onClick={() => handleTransitionTo('tips', '¡Ad Sapientiam!')} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-4 px-6 rounded-xl w-full text-lg sm:text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
+                      💡 Aprender tips latinescos
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          else if (view === 'phonetics') {
+            const bgGreen = "bg-[#f2f7ed]";
+            const bgOrange = "bg-[#ffebd6]";
+            const bgBlue = "bg-[#e8f0fe]";
+            const tdClass = "border border-slate-300 p-3 sm:p-4 text-center text-lg sm:text-2xl font-black text-slate-700";
+
+            content = (
+              <div className="h-[100dvh] bg-slate-50 flex flex-col font-sans relative overflow-y-auto w-full">
+                <div className="bg-white shadow-md p-4 sticky top-0 z-20 flex justify-between items-center border-b border-slate-200">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">🗣️ Fonética Latina</h1>
+                  <button onClick={() => setView('menu')} className="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-bold text-slate-700 transition-colors flex items-center gap-2">
+                    ⬅️ Volver al menú
+                  </button>
+                </div>
+                
+                <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full pb-12">
+                  <p className="text-center text-slate-500 font-medium mb-6 text-sm sm:text-base">
+                    Tabla de correspondencias entre la escritura latina y sus principales formas de pronunciación.
+                  </p>
+
+                  <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-300 custom-scrollbar mb-8">
+                    <table className="w-full border-collapse min-w-[600px]">
+                      <thead>
+                        <tr>
+                          <th colSpan={2} className={`${bgGreen} p-4 text-sm sm:text-lg font-black text-slate-800 border border-slate-300 uppercase`}>Escritura</th>
+                          <th className={`${bgOrange} p-4 text-sm sm:text-lg font-black text-slate-800 border border-slate-300 uppercase leading-tight`}>Pronunciación<br/>Clásica o Restituta</th>
+                          <th className={`${bgBlue} p-4 text-sm sm:text-lg font-black text-slate-800 border border-slate-300 uppercase leading-tight`}>Pronunciación<br/>Eclesiástica</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>ae</td><td className={`${bgOrange} ${tdClass}`}>ae</td><td rowSpan={2} className={`${bgBlue} ${tdClass}`}>e</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>oe</td><td className={`${bgOrange} ${tdClass}`}>oe</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td rowSpan={4} className={`${bgGreen} ${tdClass}`}>c</td><td className={`${bgGreen} ${tdClass}`}>e</td><td rowSpan={4} className={`${bgOrange} ${tdClass}`}>k</td><td rowSpan={4} className={`${bgBlue} ${tdClass}`}>ch</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>i</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>ae</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>oe</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>ch</td><td className={`${bgOrange} ${tdClass}`}>k</td><td className={`${bgBlue} ${tdClass}`}>k</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td rowSpan={4} className={`${bgGreen} ${tdClass}`}>g</td><td className={`${bgGreen} ${tdClass}`}>e</td><td rowSpan={4} className={`${bgOrange} ${tdClass}`}>g <br/><span className="text-xs sm:text-sm font-normal opacity-70">(suave)</span></td><td rowSpan={4} className={`${bgBlue} ${tdClass}`}>y <br/><span className="text-xs sm:text-sm font-normal opacity-70">(fuerte)</span></td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>i</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>ae</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>oe</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>gn</td><td className={`${bgOrange} ${tdClass}`}>gn</td><td className={`${bgBlue} ${tdClass}`}>ñ</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>gu</td><td colSpan={2} className={`${bgOrange} ${tdClass}`}>gü</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>qu</td><td colSpan={2} className={`${bgOrange} ${tdClass}`}>qü</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>ll</td><td colSpan={2} className={`${bgOrange} ${tdClass}`}>ll <span className="text-xs sm:text-sm font-normal opacity-70">(dos eles)</span></td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>j</td><td colSpan={2} className={`${bgOrange} ${tdClass}`}>i</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>ph</td><td colSpan={2} className={`${bgOrange} ${tdClass}`}>f</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} rowSpan={2} className={`${bgGreen} ${tdClass}`}>ti</td><td rowSpan={2} className={`${bgOrange} ${tdClass}`}>ti</td><td className={`${bgBlue} ${tdClass}`}>tsí</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgBlue} ${tdClass}`}>ti <span className="text-xs sm:text-sm font-normal opacity-70">(tras s, t, x)</span></td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td rowSpan={4} className={`${bgGreen} ${tdClass}`}>sc</td><td className={`${bgGreen} ${tdClass}`}>e</td><td rowSpan={4} className={`${bgOrange} ${tdClass}`}>sc</td><td rowSpan={4} className={`${bgBlue} ${tdClass}`}>sch / sh</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>i</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>ae</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td className={`${bgGreen} ${tdClass}`}>oe</td></tr>
+                        <tr className="hover:brightness-95 transition-all"><td colSpan={2} className={`${bgGreen} ${tdClass}`}>v</td><td className={`${bgOrange} ${tdClass}`}>u</td><td className={`${bgBlue} ${tdClass}`}>v</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="bg-[#f0f4ff] border border-indigo-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-6">
+                    <h3 className="text-indigo-900 font-black text-xl sm:text-2xl mb-2 flex items-center justify-center gap-2">🎧 Práctica Audiovisual</h3>
+                    <p className="text-slate-800 font-bold text-base sm:text-lg mb-2">¡Escucha cómo sonaba el Latín!</p>
+                    <p className="text-indigo-600 italic font-medium mb-6">"Si Latinem vis audire"</p>
+                    <a href="https://youtu.be/KOiS8k74aKk?si=sNY626zE4YqC_qvz" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-3 bg-[#e62117] hover:bg-[#c91810] text-white font-bold py-3 px-6 sm:px-8 rounded-xl shadow-md transition-transform hover:scale-105 active:scale-95">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                      Ver video en YouTube
+                    </a>
+                  </div>
+                  
+                  <button onClick={() => { resetGame(); handleTransitionTo('puzzle', '¡Ad Ludum!'); }} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-8 rounded-xl w-full text-lg sm:text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                    🏛️ ¡Empezar a jugar!
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          else if (view === 'tips') {
+            content = (
+              <div className="h-[100dvh] bg-slate-50 flex flex-col font-sans relative overflow-y-auto w-full">
+                <div className="bg-white shadow-md p-4 sticky top-0 z-20 flex justify-between items-center border-b border-slate-200">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">💡 Tips Latinescos</h1>
+                  <button onClick={() => setView('menu')} className="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-bold text-slate-700 transition-colors flex items-center gap-2">
+                    ⬅️ Volver al menú
+                  </button>
+                </div>
+                
+                <div className="p-4 sm:p-6 max-w-3xl mx-auto w-full space-y-4 pb-12">
+                  <p className="text-slate-600 font-medium mb-6 text-center">Lee estos consejos clave que te ayudarán a dominar las declinaciones más rápido.</p>
+                  {ALL_HINTS.map((hint, idx) => (
+                    <div key={idx} className={`p-4 sm:p-5 rounded-xl border-2 flex items-start gap-4 shadow-sm transition-transform hover:-translate-y-1 ${hint.style}`}>
+                      <span className="text-3xl sm:text-4xl drop-shadow-sm">{hint.icon}</span>
+                      <div>
+                        <h3 className="font-black text-lg sm:text-xl mb-1 uppercase tracking-tight">{hint.title}</h3>
+                        <p className="font-medium text-sm sm:text-base opacity-90">{hint.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={() => { resetGame(); handleTransitionTo('puzzle', '¡Ad Ludum!'); }} className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-8 rounded-xl w-full text-lg sm:text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                    🏛️ ¡Empezar a jugar!
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          else if (view === 'exercises') {
+            const currentEx = exPool[exIndex];
+            const currentWord = currentEx?.w;
+            const progressPct = ((exIndex) / exPool.length) * 100;
+            
+            let highlightedSentence = currentEx?.sentence;
+            if (currentEx && currentEx.sentence && currentEx.target) {
+                const parts = currentEx.sentence.split(currentEx.target);
+                if (parts.length === 2) {
+                    highlightedSentence = (
+                        <span>
+                            {parts[0]}<span className="bg-yellow-200 text-yellow-900 font-bold px-1.5 py-0.5 rounded shadow-sm mx-0.5">{currentEx.target}</span>{parts[1]}
+                        </span>
+                    );
+                }
+            }
+
+            content = (
+              <div className="h-[100dvh] bg-slate-50 flex flex-col font-sans select-none overflow-y-auto w-full">
+                <div className="bg-white shadow-md p-3 flex justify-between items-center sticky top-0 z-20">
+                  <h1 className="text-base sm:text-xl font-bold text-gray-800">📝 Práctica en Contexto</h1>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex items-center bg-gray-100 rounded text-[10px] sm:text-sm font-bold px-1.5 sm:px-2 py-1 gap-2 border border-gray-200 shadow-inner">
+                      <span title="Puntaje Total" className="px-2">🏆 <span className="text-green-600">{scoreTotal}</span> pts</span>
+                    </div>
+                    <button onClick={() => { setView('puzzle'); setIsTimerActive(false); }} className="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded font-semibold ml-2 text-xs sm:text-sm">Volver</button>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 h-1"><div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${progressPct}%` }}></div></div>
+
+                <div className="flex-grow flex flex-col items-center p-4 max-w-3xl mx-auto w-full pb-10">
+                  {exFeedback !== 'finished' && currentEx ? (
+                    <div className="w-full">
+                      <div className="bg-white rounded-xl shadow-md p-5 mb-4 text-center border-t-4 border-blue-500">
+                        <p className="text-gray-400 text-xs font-bold uppercase mb-3">{exIndex + 1} de {exPool.length}</p>
+                        
+                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl mb-5 text-left shadow-inner">
+                          <p className="text-slate-700 text-sm sm:text-base mb-3 leading-relaxed">
+                            <span className="text-lg mr-1">📖</span> <strong>Oración:</strong> {highlightedSentence}
+                          </p>
+                          <div className="flex items-center bg-white p-2.5 rounded-lg border border-indigo-100">
+                            <span className="text-lg mr-2">🧩</span>
+                            <span className="text-slate-600 text-sm sm:text-base mr-2">Función a cumplir:</span>
+                            <strong className="text-indigo-700 text-sm sm:text-base bg-indigo-50 px-2 py-1 rounded">{currentEx.syntax}</strong>
+                          </div>
+                        </div>
+
+                        <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Analiza la forma latina:</p>
+                        <h2 className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tight">{currentWord}</h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        {['decl', 'caso', 'num', 'gen'].map(cat => (
+                          <div key={cat}>
+                            <h3 className="text-sm font-bold text-slate-500 uppercase mb-1">{cat === 'decl' ? 'Declinación' : cat === 'num' ? 'Número' : cat === 'gen' ? 'Género' : 'Caso'}</h3>
+                            <div className={`grid gap-2 ${cat === 'caso' ? 'grid-cols-3' : cat === 'decl' ? 'grid-cols-5' : cat === 'gen' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                              {OPTIONS[cat].map(opt => (
+                                <button key={opt} onClick={() => toggleAns(cat, opt)}
+                                  className={`py-2 text-sm rounded font-bold border transition-colors ${exAns[cat] === opt ? 'bg-blue-600 text-white border-blue-700 shadow-inner' : 'bg-white text-slate-600 border-slate-300 hover:bg-blue-50'}`}
+                                >
+                                  {opt === 'Nominativo' ? 'Nom' : opt === 'Genitivo' ? 'Gen' : opt === 'Dativo' ? 'Dat' : opt === 'Acusativo' ? 'Acu' : opt === 'Vocativo' ? 'Voc' : opt === 'Ablativo' ? 'Abl' : opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {exAns.decl === '3ra' && (
+                          <div className="mt-2 p-3 bg-purple-50 rounded-lg border border-purple-200 shadow-inner animate-[scale-up_0.2s_ease-out]">
+                            <h3 className="text-sm font-bold text-purple-700 uppercase mb-2">🏷️ Tipo de Tema (3ra Decl.)</h3>
+                            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                              {["Consonante", "Vocálico (-i)"].map(opt => (
+                                <button key={opt} onClick={() => toggleAns('tema3ra', opt)}
+                                  className={`py-2 text-sm rounded font-bold border transition-colors ${exAns.tema3ra === opt ? 'bg-purple-600 text-white border-purple-700 shadow-md' : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-100'}`}
+                                >
+                                  {opt === "Consonante" ? "Consonante (Imparisílabo)" : "Vocálico -i (Parisílabo)"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-500 uppercase mb-1">Enunciado (Ej: rosa, rosae)</h3>
+                          <input type="text" value={exAns.dict} onChange={(e) => toggleAns('dict', e.target.value)} disabled={exFeedback === 'correct'}
+                            className={`w-full py-2 px-3 rounded font-bold border outline-none ${exFeedback === 'correct' ? 'border-green-500 bg-green-50 text-green-900' : 'border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200'}`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        {exFeedback === 'missing' && <p className="text-red-500 font-bold text-center mb-2 animate-bounce">⚠️ Completa todas las opciones</p>}
+                        {exFeedback === 'incorrect' && <p className="text-red-600 font-bold text-center bg-red-100 border border-red-300 p-3 rounded-lg mb-2 shadow-sm">❌ Revisa: {exHints.join(", ")}</p>}
+                        {exFeedback === 'correct' ? (
+                          <div className="animate-[scale-up_0.2s_ease-out]">
+                            <div className="bg-green-50 border-2 border-green-500 rounded-xl p-4 mb-4 text-center shadow-sm">
+                              <h4 className="text-green-800 font-black text-lg">🎉 ¡Análisis Perfecto!</h4>
+                              <p className="text-green-700 text-sm mt-1 mb-2">Puntaje sumado a tu total</p>
+                              {exMistakesCurrentWord === 0 && (
+                                <span className="inline-block bg-yellow-300 text-yellow-900 px-3 py-1 rounded-full font-bold text-sm shadow-sm animate-pulse">
+                                  ⭐ +10 pts Bonus Sin Errores ⭐
+                                </span>
+                              )}
+                            </div>
+                            <button onClick={nextExercise} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95">Siguiente ➔</button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button onClick={checkExercise} className="flex-grow bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95">Comprobar</button>
+                            <button onClick={autoCompleteExercise} className="px-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-lg shadow transition-colors" title="Autocompletar">🧪</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-xl shadow-xl p-8 text-center mt-10 w-full max-w-lg border-t-8 border-green-500" style={{ animation: 'scale-up 0.5s ease-out' }}>
+                      <h2 className="text-3xl font-black text-green-600 mb-2">¡Práctica Completada!</h2>
+                      <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mb-6">Fin del Entrenamiento</p>
+                      
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6 text-sm text-slate-600 font-bold tracking-wide shadow-inner text-left">
+                        <div className="flex justify-between items-center mb-2">
+                            <span>✅ Palabras correctas:</span>
+                            <span className="text-green-600 text-lg">{score.correct}</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-4">
+                            <span>❌ Intentos fallidos:</span>
+                            <span className="text-red-500 text-lg">{score.mistakes}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-slate-300 pt-3 mt-2 uppercase">
+                            <span>🌟 PUNTAJE TOTAL:</span>
+                            <span className="text-yellow-600 text-3xl font-black">{scoreTotal}</span>
+                        </div>
+                      </div>
+
+                      {!isAdvancedUnlocked ? (
+                        <button onClick={() => { setView('puzzle'); handleUnlock(); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-md transition-transform hover:scale-105 active:scale-95 text-lg flex items-center justify-center gap-2">
+                          🔓 Desbloquear Tablas Avanzadas
+                        </button>
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          <button onClick={() => { resetGame(); handleTransitionTo('welcome', '¡De Novo!'); }} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-xl shadow-md transition-transform hover:scale-105 active:scale-95 text-lg flex items-center justify-center gap-2">
+                            🔄 Jugar desde el inicio total
+                          </button>
+                          <button onClick={() => { setView('puzzle'); setIsTimerActive(false); }} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 rounded-xl shadow-sm transition-transform active:scale-95 text-base">
+                            Volver al Rompecabezas 🏛️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+          else if (view === 'puzzle') {
+            const currentHint = ALL_HINTS[activeHintIndex];
+            
+            content = (
+              <div className="h-[100dvh] flex flex-col font-sans select-none bg-gray-50 overflow-hidden relative w-full">
+                
+                {/* INTERFAZ PRINCIPAL DEL PUZZLE */}
+                <div className="bg-white shadow-sm p-2 flex flex-row justify-between items-center z-10 flex-shrink-0 relative">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button onClick={() => setView('menu')} className="bg-slate-200 hover:bg-slate-300 p-1.5 sm:px-3 sm:py-1 rounded text-xs sm:text-sm font-bold text-slate-700 transition-colors flex items-center gap-1">
+                      ⬅️ <span className="hidden sm:inline">Menú</span>
+                    </button>
+                  </div>
+                  
+                  <div className="flex gap-1.5 items-center">
+                    <div className="flex items-center bg-gray-100 rounded text-[10px] sm:text-sm font-bold px-1.5 sm:px-2 py-1 gap-2 border border-gray-200 shadow-inner">
+                      <span title="Tiempo Fase">⏳ <span className="text-blue-600">{formatTime(timer)}</span></span>
+                      <span title="Puntaje Total" className="border-l border-gray-300 pl-2">🏆 <span className="text-green-600">{scoreTotal}</span></span>
+                      <span title="Faltantes" className="hidden sm:inline border-l border-gray-300 pl-2">🧩 <span className="text-orange-600">{faltantes}</span></span>
+                    </div>
+                    
+                    <button onClick={() => { if (!isAdvancedUnlocked) handleUnlock(); else setIsAdvancedUnlocked(false); }} 
+                      className={`px-2 py-1 rounded shadow-sm text-xs font-bold text-white transition-colors ${!isAdvancedUnlocked ? 'bg-indigo-600 hover:bg-indigo-700 animate-[unlock-bounce_2s_infinite]' : 'bg-slate-600'}`}>
+                      {isAdvancedUnlocked ? "🔒 Básicas" : "🔓 Avanzadas"}
+                    </button>
+                    
+                    {!gameComplete && (
+                      <button onClick={autoCompletePuzzle} className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 flex items-center gap-1 px-2 py-1 rounded shadow-sm text-[10px] sm:text-xs font-bold transition-colors">
+                        🧪 <span className="hidden sm:inline">Auto</span>
+                      </button>
+                    )}
+                    <button onClick={resetGame} className="bg-red-500 hover:bg-red-600 text-white flex items-center gap-1 px-2 py-1 rounded shadow-sm text-[10px] sm:text-xs font-bold transition-colors">
+                      🔄 <span className="hidden sm:inline">Reset</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`flex items-start justify-between p-2 sm:p-3 shadow-sm border-b flex-shrink-0 transition-colors duration-300 ${currentHint.style}`}>
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <span className="text-xl sm:text-3xl drop-shadow-sm flex-shrink-0 mt-0.5">{currentHint.icon}</span>
+                    <p className="font-medium text-[11px] sm:text-sm leading-snug break-words">
+                      <strong className="uppercase text-[10px] sm:text-xs tracking-wider opacity-80 mr-1 block sm:inline mb-0.5">{currentHint.title}:</strong>
+                      {currentHint.text}
+                    </p>
+                  </div>
+                  <button onClick={() => setActiveHintIndex((prev) => (prev + 1) % ALL_HINTS.length)} className="ml-2 p-1.5 rounded-full bg-white/50 hover:bg-white/80 transition flex-shrink-0 shadow-sm self-center sm:self-start mt-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+
+                <div className="flex-grow overflow-auto bg-white custom-scrollbar relative z-0">
+                  <table className="border-collapse w-max min-w-full text-center" style={{ border: `2px solid ${COLORS.cellBorder}` }}>
+                    <thead className="sticky top-0 z-30 shadow-md text-[11px] sm:text-sm">
+                      <tr>
+                        <th rowSpan={3} colSpan={2} className="bg-white p-2 z-40 sticky top-0 left-0" style={{ borderBottom: `2px solid ${COLORS.cellBorder}`, borderRight: `2px solid ${COLORS.cellBorder}`, minWidth: `${COL1_WIDTH + COL2_WIDTH}px` }}>
+                          <span className="text-sm sm:text-xl font-black tracking-widest">CASO</span>
+                        </th>
+                        <th className="font-bold py-1" style={{ backgroundColor: COLORS.col1Head, border: `1px solid ${COLORS.cellBorder}` }}>PRIMERA</th>
+                        <th colSpan={2} className="font-bold py-1" style={{ backgroundColor: COLORS.col2Head, border: `1px solid ${COLORS.cellBorder}` }}>SEGUNDA</th>
+                        <th colSpan={4} className="font-bold py-1" style={{ backgroundColor: COLORS.col3Head, border: `1px solid ${COLORS.cellBorder}` }}>TERCERA</th>
+                        <th colSpan={2} className="font-bold py-1" style={{ backgroundColor: COLORS.col4Head, border: `1px solid ${COLORS.cellBorder}` }}>CUARTA</th>
+                        <th className="font-bold py-1" style={{ backgroundColor: COLORS.col5Head, border: `1px solid ${COLORS.cellBorder}` }}>QUINTA</th>
+                      </tr>
+                      <tr>
+                        <th className="font-bold py-0.5 sm:py-1 leading-tight" style={{ backgroundColor: COLORS.col1Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema en A</th>
+                        <th colSpan={2} className="font-bold py-0.5 sm:py-1 leading-tight" style={{ backgroundColor: COLORS.col2Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema en O</th>
+                        <th colSpan={2} className="font-bold py-0.5 sm:py-1 leading-tight text-[9px] sm:text-xs" style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema cons.<br/>Imparisíl.</th>
+                        <th colSpan={2} className="font-bold py-0.5 sm:py-1 leading-tight text-[9px] sm:text-xs" style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema en I<br/>Parisíl.</th>
+                        <th colSpan={2} className="font-bold py-0.5 sm:py-1 leading-tight" style={{ backgroundColor: COLORS.col4Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema en U</th>
+                        <th className="font-bold py-0.5 sm:py-1 leading-tight" style={{ backgroundColor: COLORS.col5Base, border: `1px solid ${COLORS.cellBorder}` }}>Tema en E</th>
+                      </tr>
+                      <tr className="text-[9px] sm:text-xs">
+                        <th style={{ backgroundColor: COLORS.col1Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th>
+                        <th style={{ backgroundColor: COLORS.col2Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th><th style={{ backgroundColor: COLORS.col2Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>N</th>
+                        <th style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th><th style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>N</th>
+                        <th style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th><th style={{ backgroundColor: COLORS.col3Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>N</th>
+                        <th style={{ backgroundColor: COLORS.col4Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th><th style={{ backgroundColor: COLORS.col4Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>N</th>
+                        <th style={{ backgroundColor: COLORS.col5Base, border: `1px solid ${COLORS.cellBorder}`, borderBottom: `2px solid ${COLORS.cellBorder}` }}>M/F</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {DATA.map((row, r) => {
+                        const isSingularGroup = r < 6;
+                        const isFirstOfGroup = r === 0 || r === 6;
+                        const isGenitive = r === 1 || r === 7;
+                        return (
+                          <React.Fragment key={r}>
+                            {r === 6 && <tr><td colSpan={12} style={{ backgroundColor: COLORS.separator, height: '8px' }}></td></tr>}
+                            <tr>
+                              {isFirstOfGroup && (
+                                <td rowSpan={6} className="font-black text-xs sm:text-sm tracking-widest text-center sticky left-0 z-20"
+                                  style={{ width: `${COL1_WIDTH}px`, minWidth: `${COL1_WIDTH}px`, backgroundColor: isSingularGroup ? COLORS.singHead : COLORS.plurHead, border: `1px solid ${COLORS.cellBorder}`, borderLeft: `2px solid ${COLORS.cellBorder}`, writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}>
+                                  {isSingularGroup ? "SINGULAR" : "PLURAL"}
+                                </td>
+                              )}
+
+                              <td className="p-1 px-1.5 sm:px-2 bg-gray-100 whitespace-nowrap text-left sticky z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]" 
+                                  style={{ left: `${COL1_WIDTH}px`, width: `${COL2_WIDTH}px`, minWidth: `${COL2_WIDTH}px`, border: `1px solid ${COLORS.cellBorder}`, borderRight: `2px solid ${COLORS.cellBorder}` }}>
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-[10px] sm:text-xs leading-tight">{ROW_LABELS[r].main}</span>
+                                  <span className="text-[8px] sm:text-[10px] text-gray-600 font-normal leading-tight">{ROW_LABELS[r].sub}</span>
+                                </div>
+                              </td>
+
+                              {row.map((expectedValue, c) => {
+                                const isAdvancedCol = c >= 3;
+                                const isLocked = isAdvancedCol && !isAdvancedUnlocked;
+                                const cellColor = getCellColor(r, c);
+                                const placed = isPlacedGrid[r][c];
+                                const isFlashing = flashCell?.r === r && flashCell?.c === c;
+                                const isPopping = popCell?.r === r && popCell?.c === c;
+                                const isTarget = selectedPiece && !placed && !isLocked;
+                                
+                                return (
+                                  <td key={c} onClick={() => { if(!isLocked) handleCellClick(r, c) }} onDragOver={(e) => { if(!isLocked) e.preventDefault() }} onDrop={(e) => { if(!isLocked) handleDrop(e, r, c) }}
+                                    className={`relative p-0 w-16 sm:w-24 h-12 sm:h-14 transition-all duration-200 ${isLocked ? 'cursor-not-allowed bg-gray-200' : isTarget ? 'target-cell' : 'cursor-pointer hover:brightness-95'} ${placed && !isLocked ? (isGenitive ? 'font-black text-sm sm:text-base' : 'font-bold text-sm sm:text-base') : ''} ${isFlashing ? 'bg-red-500 animate-pulse' : ''}`}
+                                    style={{ backgroundColor: isLocked ? '#e2e8f0' : (placed && !isFlashing ? cellColor : (isTarget ? '' : COLORS.emptySlot)), border: `1px solid ${COLORS.cellBorder}` }}>
+                                    {isLocked && <div className="absolute inset-0 bg-slate-500/10 flex items-center justify-center z-10"><span className="text-sm sm:text-xl opacity-40">🔒</span></div>}
+                                    <div className={`flex flex-col items-center justify-center w-full h-full ${isPopping ? 'animate-[bounce_0.3s_ease-in-out]' : ''}`}>
+                                      {placed && !isLocked ? (
+                                        <React.Fragment>
+                                          <span className="whitespace-nowrap px-1 leading-none">{expectedValue}</span>
+                                          <span className="text-[9px] sm:text-[10px] opacity-75 italic font-medium leading-none mt-1 truncate w-full text-center px-0.5">{currentExamples[c]?.[r]}</span>
+                                        </React.Fragment>
+                                      ) : (!isLocked && <div className="w-4/5 h-1/2 border-2 border-dashed border-gray-400 opacity-20 rounded"></div>)}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="bg-white border-t-2 border-gray-200 shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.1)] p-2 sm:p-4 flex-shrink-0 z-30 pb-safe">
+                  <p className="text-[10px] sm:text-sm text-gray-500 mb-1.5 font-bold text-center uppercase tracking-wide">
+                    {gameComplete ? <span className="text-green-600">¡Tabla completada! Revisa las terminaciones.</span> : <React.Fragment>👆 <span className="text-blue-600">Celulares:</span> Toca una pieza aquí y luego toca su casilla arriba.</React.Fragment>}
+                  </p>
+                  <div className="flex flex-wrap justify-center content-start gap-1.5 sm:gap-2 h-[20vh] max-h-32 sm:max-h-40 overflow-y-auto custom-scrollbar p-1">
+                    {uniquePieces.map((val) => (
+                      <div key={val} draggable onDragStart={(e) => handleDragStart(e, val)} onClick={() => setSelectedPiece(val)}
+                        className={`cursor-pointer px-2 sm:px-3 py-1 sm:py-1.5 border-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center select-none ${selectedPiece === val ? 'bg-blue-600 text-white border-blue-800 scale-110 shadow-md ring-2 ring-blue-300' : 'bg-gray-50 text-slate-800 border-slate-300 hover:bg-slate-200 active:scale-95'}`}>
+                        {val} <span className={`text-[10px] ml-1 px-1 rounded-full ${selectedPiece === val ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-500'}`}>x{remainingPieces[val]}</span>
+                      </div>
+                    ))}
+                    {uniquePieces.length === 0 && (
+                      <div className="flex flex-col items-center justify-center w-full mt-1">
+                        <div className="text-green-600 font-bold text-lg animate-pulse mb-2">¡Todas ubicadas! 🎉</div>
+                        <button onClick={() => setShowCompleteModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 px-6 rounded-xl shadow-md transition-transform hover:scale-105 active:scale-95 flex items-center gap-2">
+                          Ver Resultados ➔
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* MODAL DE COMPLETADO Y ESTADÍSTICAS */}
+                {showCompleteModal && (
+                  <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative" style={{ animation: 'scale-up 0.3s ease-out' }}>
+                      <button onClick={() => setShowCompleteModal(false)} className="absolute top-3 right-4 text-gray-400 hover:text-gray-800 text-2xl font-bold leading-none">&times;</button>
+                      <h2 className="text-3xl font-black text-green-600 mb-1">{isAdvancedUnlocked ? "¡Tabla Épica!" : `¡Felicidades, ${nombre}!`}</h2>
+                      <p className="text-sm sm:text-base text-gray-600 mb-4">{isAdvancedUnlocked ? "Has logrado armar TODAS las declinaciones latinas." : "Has dominado la 1ª y 2ª declinación perfecta."}</p>
+                      
+                      {/* CAJA DE ESTADÍSTICAS */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6 text-sm text-slate-600 font-bold tracking-wide shadow-inner text-left">
+                        {stats?.basic && isAdvancedUnlocked && (
+                            <div className="mb-3 border-b border-slate-200 pb-3">
+                                <p className="uppercase text-slate-400 text-xs mb-1">Fase Básica Guardada</p>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span>⏳ Tiempo: <span className="text-slate-800">{formatTime(stats.basic.time)}</span></span>
+                                    <span className="text-green-600">🏆 {stats.basic.score} pts</span>
+                                </div>
+                            </div>
+                        )}
+                        <div className="mb-2">
+                            <p className="uppercase text-slate-400 text-xs mb-1">{isAdvancedUnlocked ? "Fase Avanzada" : "Fase Básica"}</p>
+                            <div className="flex justify-between items-center mb-1">
+                                <span>⏳ Tiempo transcurrido:</span>
+                                <span className="text-blue-600 text-lg">{formatTime(timer)}</span>
+                            </div>
+                            <div className="flex justify-between items-center mb-1">
+                                <span>🎯 Errores cometidos:</span>
+                                <span className="text-red-500 text-lg">{mistakesCurrentPhase}</span>
+                            </div>
+                        </div>
+                        {stats?.[isAdvancedUnlocked ? 'advanced' : 'basic']?.bonus > 0 && (
+                            <div className="text-yellow-600 font-black text-sm text-center my-3 bg-yellow-50 py-1 rounded">
+                                ¡Bonus por precisión tabla: +{stats[isAdvancedUnlocked ? 'advanced' : 'basic'].bonus} pts!
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center border-t border-slate-300 pt-3 mt-2 uppercase">
+                            <span>🌟 PUNTAJE TOTAL:</span>
+                            <span className="text-yellow-600 text-3xl font-black">{scoreTotal}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col gap-2.5">
+                        {!isAdvancedUnlocked ? (
+                          <React.Fragment>
+                            <button onClick={() => startExercises('basic')} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl w-full text-sm sm:text-base shadow-md transition-transform hover:scale-105">
+                              📝 Ejercicios (1ª y 2ª)
+                            </button>
+                          </React.Fragment>
+                        ) : (
+                          <button onClick={() => startExercises('advanced')} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl w-full text-sm sm:text-base shadow-md transition-transform hover:scale-105">
+                            📝 Ejercicios Avanzados
+                          </button>
+                        )}
+                        <button onClick={() => setShowCompleteModal(false)} className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold py-2.5 rounded-xl w-full text-sm sm:text-base transition shadow-sm">
+                          👀 Ver tabla completa
+                        </button>
+                        <button onClick={resetGame} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2.5 rounded-xl w-full text-sm sm:text-base transition">Jugar de Nuevo</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ANIMACIÓN DE DESBLOQUEO DEL CANDADO */}
+                {unlockStage > 0 && (
+                  <div className="fixed inset-0 bg-slate-900/95 flex flex-col items-center justify-center z-[100] backdrop-blur-md">
+                      <div className="text-center px-4">
+                          <div className="text-[100px] sm:text-[140px] mb-8 h-40 flex items-center justify-center">
+                              {unlockStage === 1 && <span className="inline-block" style={{ animation: 'shake 0.15s infinite' }}>🔒</span>}
+                              {unlockStage === 2 && <span className="inline-block scale-150">💥</span>}
+                              {unlockStage === 3 && <span className="inline-block drop-shadow-[0_0_40px_rgba(250,204,21,0.8)]" style={{ animation: 'scale-up 0.5s ease-out' }}>🔓</span>}
+                          </div>
+                          {unlockStage === 3 && (
+                              <div style={{ animation: 'scale-up 0.5s ease-out' }}>
+                                  <h2 className="text-3xl sm:text-5xl font-black text-yellow-400 mb-4 drop-shadow-md">¡Primera Etapa Superada!</h2>
+                                  <p className="text-xl sm:text-3xl text-white font-bold tracking-wide">¡{nombre}, te estás convirtiendo en un romano! 🏛️</p>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // ================= RENDERIZADO PRINCIPAL COMPLETO =================
+          return (
+            <React.Fragment>
+              {content}
+              
+              {/* ANIMACIÓN DE ENTRADA AL COLISEO GLOBAl */}
+              {isEnteringColosseum && (
+                  <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden colosseum-bg">
+                      <div className="colosseum-container flex items-center justify-center w-full max-w-5xl h-full p-4 pointer-events-none">
+                          <svg viewBox="0 0 800 600" className="w-full h-full drop-shadow-[0_10px_40px_rgba(0,0,0,0.9)]">
+                              <defs>
+                                  <radialGradient id="arenaLight" cx="50%" cy="50%" r="50%">
+                                      <stop offset="0%" stopColor="#fef08a" stopOpacity="1" />
+                                      <stop offset="100%" stopColor="#b45309" stopOpacity="1" />
+                                  </radialGradient>
+                              </defs>
+                              <rect x="300" y="320" width="200" height="250" fill="url(#arenaLight)" />
+                              
+                              <text x="400" y="470" fontFamily="serif" fontSize="28" fontWeight="bold" fill="#78350f" textAnchor="middle" opacity="0.9" letterSpacing="2">IN LUDUM!</text>
+                              <ellipse cx="400" cy="550" rx="380" ry="40" fill="#1c1917" />
+                              <path d="M50,450 C50,250 150,150 400,150 L400,340 A80,80 0 0,0 320,420 L320,550 C150,550 50,550 50,450 Z" fill="#94a3b8" stroke="#334155" strokeWidth="4"/>
+                              <path d="M750,450 C750,250 650,150 400,150 L400,340 A80,80 0 0,1 480,420 L480,550 C650,550 750,550 750,450 Z" fill="#64748b" stroke="#334155" strokeWidth="4"/>
+
+                              <path d="M120,440 A30,30 0 0,1 180,440 L180,550 L120,550 Z" fill="#0f172a"/>
+                              <path d="M210,400 A30,30 0 0,1 270,400 L270,550 L210,550 Z" fill="#0f172a"/>
+                              <path d="M530,400 A30,30 0 0,1 590,400 L590,550 L530,550 Z" fill="#0f172a"/>
+                              <path d="M620,440 A30,30 0 0,1 680,440 L680,550 L620,550 Z" fill="#0f172a"/>
+
+                              <rect x="180" y="260" width="20" height="40" fill="#0f172a" rx="10"/>
+                              <rect x="250" y="230" width="20" height="40" fill="#0f172a" rx="10"/>
+                              <rect x="530" y="230" width="20" height="40" fill="#0f172a" rx="10"/>
+                              <rect x="600" y="260" width="20" height="40" fill="#0f172a" rx="10"/>
+
+                              <text x="400" y="280" fontFamily="serif" fontSize="30" fontWeight="bold" fill="#334155" textAnchor="middle" letterSpacing="6">COLOSSEUM</text>
+
+                              {/* PUERTA IZQUIERDA */}
+                              <g className="door-left">
+                                  <path d="M320,420 A80,80 0 0,1 400,340 L400,550 L320,550 Z" fill="#451a03" stroke="#1c1917" strokeWidth="4"/>
+                                  <path d="M335,420 A65,65 0 0,1 390,360 L390,535 L335,535 Z" fill="#78350f" stroke="#292524" strokeWidth="2"/>
+                                  <circle cx="380" cy="460" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2"/>
+                                  <circle cx="380" cy="460" r="4" fill="#451a03"/>
+                              </g>
+
+                              {/* PUERTA DERECHA */}
+                              <g className="door-right">
+                                  <path d="M400,340 A80,80 0 0,1 480,420 L480,550 L400,550 Z" fill="#451a03" stroke="#1c1917" strokeWidth="4"/>
+                                  <path d="M410,360 A65,65 0 0,1 465,420 L465,535 L410,535 Z" fill="#78350f" stroke="#292524" strokeWidth="2"/>
+                                  <circle cx="420" cy="460" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2"/>
+                                  <circle cx="420" cy="460" r="4" fill="#451a03"/>
+                              </g>
+                          </svg>
+                      </div>
+
+                      {/* Texto Superpuesto Personalizado */}
+                      <h2 className="colosseum-text absolute bottom-[15%] text-4xl sm:text-6xl font-black text-amber-400 drop-shadow-[0_4px_20px_rgba(0,0,0,1)] tracking-[0.2em] uppercase text-center w-full px-4">
+                          {transitionText}
+                      </h2>
+                  </div>
+              )}
+            </React.Fragment>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
